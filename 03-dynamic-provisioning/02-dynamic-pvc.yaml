@@ -1,0 +1,83 @@
+# Dynamic Provisioning PVC Examples
+#
+# With dynamic provisioning, you only create PVCs.
+# The StorageClass's provisioner automatically creates the PV.
+#
+# Benefits:
+# - No need to pre-create PVs
+# - Storage is allocated on-demand
+# - Easier for developers - just request what you need
+
+---
+# PVC using the default StorageClass
+# When storageClassName is omitted or empty, uses the cluster default
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dynamic-default-pvc
+  labels:
+    purpose: demo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 256Mi
+  # storageClassName omitted = use default StorageClass
+
+---
+# PVC using a specific StorageClass
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dynamic-retain-pvc
+  labels:
+    purpose: demo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 512Mi
+  storageClassName: retain-storage-class
+
+---
+# PVC with the expandable StorageClass
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: expandable-pvc
+  labels:
+    purpose: demo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi  # Start small, can grow later
+  storageClassName: expandable-storage-class
+
+---
+# Pod to use the dynamic PVC
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dynamic-storage-pod
+  labels:
+    purpose: demo
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sleep", "infinity"]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+      resources:
+        limits:
+          memory: "64Mi"
+          cpu: "100m"
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: dynamic-default-pvc
