@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: expandable-pvc
+  namespace: exercise-4
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: expandable-sc
+  resources:
+    requests:
+      storage: 2Gi  # Expanded from 1Gi to 2Gi

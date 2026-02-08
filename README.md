@@ -535,3 +535,8 @@ This removes all resources and the KinD cluster.
 After completing this lab, explore:
 - **Section 9: Troubleshooting** - Debug storage issues in production
 - **Rook-Ceph Deep Dive** - Production distributed storage (requires proper hardware)
+
+
+## Exercises Implementation
+
+All exercises from this lab are now implemented in the `exercises/` directory:

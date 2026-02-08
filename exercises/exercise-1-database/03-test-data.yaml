@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-postgres-client
+  namespace: exercise-1
+spec:
+  restartPolicy: Never
+  containers:
+  - name: postgres-client
+    image: postgres:15-alpine
+    command: ["sh", "-c"]
+    args:
+    - |
+      sleep 10
+      PGPASSWORD=exercise_password psql -h postgres-service -U exercise_user -d exercise_db -c "
+        CREATE TABLE IF NOT EXISTS test_data (
+          id SERIAL PRIMARY KEY,
+          message TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        INSERT INTO test_data (message) VALUES ('Exercise 1: Database Deployment Test');
+        INSERT INTO test_data (message) VALUES ('Data should persist after pod restart');
+
+        SELECT * FROM test_data;
+      "
+    env:
+    - name: PGPASSWORD
+      value: "exercise_password"

@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp
+  namespace: exercise-2
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      containers:
+      - name: webapp
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: shared-storage
+          mountPath: /usr/share/nginx/html
+        - name: shared-data
+          mountPath: /data
+      volumes:
+      - name: shared-storage
+        persistentVolumeClaim:
+          claimName: shared-web-pvc
+      - name: shared-data
+        emptyDir: {}

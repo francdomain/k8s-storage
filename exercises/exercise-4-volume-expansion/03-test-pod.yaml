@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod
+  namespace: exercise-4
+spec:
+  containers:
+  - name: test-container
+    image: busybox
+    command: ["/bin/sh", "-c"]
+    args:
+    - |
+      echo "Initial storage test pod started..."
+      echo "Current disk usage:"
+      df -h /data
+
+      echo "Writing test data..."
+      dd if=/dev/zero of=/data/testfile bs=1M count=500 status=none
+
+      echo "Test data written. Disk usage now:"
+      df -h /data
+
+      # Keep container running
+      tail -f /dev/null
+    volumeMounts:
+    - name: data-volume
+      mountPath: /data
+  volumes:
+  - name: data-volume
+    persistentVolumeClaim:
+      claimName: expandable-pvc

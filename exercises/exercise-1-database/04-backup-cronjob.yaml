@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: exercise-1
+spec:
+  schedule: "*/5 * * * *"  # Every 5 minutes for testing
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: postgres-backup
+            image: postgres:15-alpine
+            env:
+            - name: PGPASSWORD
+              value: "exercise_password"
+            command: ["sh", "-c"]
+            args:
+            - |
+              BACKUP_FILE="/backups/backup-$(date +%Y%m%d-%H%M%S).sql"
+              pg_dump -h postgres-service -U exercise_user exercise_db > $BACKUP_FILE
+              echo "Backup completed: $BACKUP_FILE"
+              ls -la /backups/
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+          restartPolicy: Never
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: postgres-backup-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-backup-pvc
+  namespace: exercise-1
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 2Gi
