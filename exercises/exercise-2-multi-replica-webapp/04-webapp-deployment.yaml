@@ -13,6 +13,8 @@ spec:
       labels:
         app: webapp
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: k3d-storage-lab-server-0
       containers:
       - name: webapp
         image: nginx:alpine
@@ -21,11 +23,42 @@ spec:
         volumeMounts:
         - name: shared-storage
           mountPath: /usr/share/nginx/html
-        - name: shared-data
-          mountPath: /data
+        startupProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Wait for NFS mount to be ready
+              timeout 30 sh -c 'while [ ! -d /usr/share/nginx/html ]; do sleep 1; done'
+              test -d /usr/share/nginx/html && echo "NFS mounted" || echo "NFS not mounted"
+          failureThreshold: 30
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 5
       volumes:
       - name: shared-storage
         persistentVolumeClaim:
           claimName: shared-web-pvc
-      - name: shared-data
-        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webapp-service
+  namespace: exercise-2
+spec:
+  selector:
+    app: webapp
+  ports:
+  - port: 80
+    targetPort: 80
