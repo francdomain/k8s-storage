@@ -540,6 +540,3 @@ After completing this lab, explore:
 ## Exercises Implementation
 
 All exercises from this lab are now implemented in the `exercises/` directory:
-
-
-<!-- sk-7fa1c3c5fbbc45f288d774602e850477 -->

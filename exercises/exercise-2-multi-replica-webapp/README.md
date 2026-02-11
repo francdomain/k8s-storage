@@ -10,11 +10,11 @@ This exercise shows how multiple replicas of a web application can:
 - Access the same data across pods
 
 **Key Concepts:**
-- **ReadWriteMany (RWX):** Multiple pods on different nodes can read and write to the same volume
-- **HostPath Storage:** Direct node-level storage access for shared data
+- **ReadWriteMany (RWX):** Multiple pods on the same node can read and write to the same volume
+- **HostPath Storage:** Direct node-level storage access using host filesystem
 - **Persistent Volumes (PV):** Cluster-level storage resource
 - **Persistent Volume Claims (PVC):** Pod-level storage request
-- **Multi-Replica Deployments:** Running multiple identical pods
+- **Multi-Replica Deployments:** Running multiple identical pods with shared storage
 
 ## Architecture
 
@@ -24,47 +24,43 @@ This exercise shows how multiple replicas of a web application can:
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
 │  Node: k3d-storage-lab-server-0                        │
-│  ┌───────────────────────────────────────┐             │
-│  │ HostPath: /exports                    │             │
-│  │ (Shared storage on node)              │             │
-│  └──────────┬──────────────────────────┬─┘             │
-│             │                          │                │
-│  ┌──────────▼────────┐    ┌────────────▼────────┐      │
-│  │   NFS Server Pod  │    │  WebApp Pod 1       │      │
-│  │  (Exports /exports)    │ (nginx:alpine)      │      │
-│  └───────────────────┘    └─────────────────────┘      │
+│  ┌───────────────────────────────────────────┐         │
+│  │ HostPath: /tmp/shared-data                │         │
+│  │ (Shared storage on node filesystem)       │         │
+│  └──────────┬──────────────────────────────┬─┘         │
+│             │                              │            │
+│    ┌────────▼────────┐        ┌────────────▼────────┐  │
+│    │  WebApp Pod 1   │        │  WebApp Pod 2       │  │
+│    │ (nginx:alpine)  │        │ (nginx:alpine)      │  │
+│    │ Shared Index    │        │ Shared Index        │  │
+│    └─────────────────┘        └─────────────────────┘  │
 │                                                         │
-│                           ┌──────────────────────────┐  │
-│                           │  WebApp Pod 2            │  │
-│                           │ (nginx:alpine)           │  │
-│                           └──────────────────────────┘  │
-│                                                         │
-│                           ┌──────────────────────────┐  │
-│                           │  WebApp Pod 3            │  │
-│                           │ (nginx:alpine)           │  │
-│                           └──────────────────────────┘  │
+│                      ┌──────────────────────────────┐   │
+│                      │  WebApp Pod 3                │   │
+│                      │ (nginx:alpine)               │   │
+│                      │ Shared Index                 │   │
+│                      └──────────────────────────────┘   │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
        ↓ (All pods mount shared storage via PVC)
-   ┌─────────────────┐
-   │   shared-web    │
-   │     -pvc (2Gi)  │ ← RWX Access Mode
-   └────────┬────────┘
+   ┌──────────────────────┐
+   │  shared-web-pvc      │
+   │    (2Gi, RWX)        │ ← ReadWriteMany Access Mode
+   └────────      ├─────────────┘
             │
-   ┌────────▼────────┐
-   │    nfs-pv       │
-   │  (HostPath)     │
-   └─────────────────┘
+   ┌────────▼──────────────┐
+   │  shared-storage-pv    │
+   │  (HostPath)           │
+   │  /tmp/shared-data     │
+   └───────────────────────┘
 ```
 
 ## Files and Configuration
 
 | File | Purpose |
 |------|---------|
-| `01-nfs-server.yaml` | NFS server deployment that exports `/exports` directory |
-| `02-nfs-pv.yaml` | PersistentVolume using HostPath `/exports` with RWX access |
-| `03-rwx-pvc.yaml` | PersistentVolumeClaim requesting 2Gi RWX storage |
-| `04-webapp-deployment.yaml` | nginx deployment with 3 replicas, all mounting shared storage |
+| `01-shared-storage.yaml` | PersistentVolume and PersistentVolumeClaim using HostPath with RWX access |
+| `02-webapp-deployment.yaml` | nginx deployment with 3 replicas, all mounting shared storage; includes init container for setup |
 | `05-test-script.sh` | Test script to verify RWX functionality |
 | `setup.sh` | Deployment script that applies all manifests |
 
@@ -75,16 +71,15 @@ This exercise shows how multiple replicas of a web application can:
 # Make scripts executable
 chmod +x setup.sh 05-test-script.sh
 
-# Deploy NFS server, storage, and web app
+# Deploy storage and web app
 ./setup.sh
 ```
 
 **What this does:**
 - Creates `exercise-2` namespace
-- Deploys NFS server pod
-- Creates PersistentVolume (HostPath backed)
-- Creates PersistentVolumeClaim
-- Deploys 3 nginx web app replicas
+- Creates PersistentVolume using HostPath at `/tmp/shared-data`
+- Creates PersistentVolumeClaim requesting RWX storage
+- Deploys 3 nginx web app replicas with init containers that populate shared storage
 
 ### 2. Wait for Ready Pods
 ```bash
@@ -92,11 +87,10 @@ chmod +x setup.sh 05-test-script.sh
 kubectl get pods -n exercise-2
 
 # Expected output (all should show 1/1 Running):
-NAME                              READY   STATUS
-nfs-server-7c8b5bf5bb-98557       1/1     Running
-webapp-5965946479-srxk4           1/1     Running
-webapp-7787f8c6d-spxlq            1/1     Running
-webapp-7d886fd749-xm4w7           1/1     Running
+NAME                       READY   STATUS    RESTARTS   AGE
+webapp-574d944bb5-9sj82    1/1     Running   0          1m
+webapp-574d944bb5-d57vc    1/1     Running   0          1m
+webapp-574d944bb5-ngshx    1/1     Running   0          1m
 ```
 
 ### 3. Test RWX Functionality
@@ -122,20 +116,22 @@ curl http://localhost:8080
 
 ## Storage Details
 
-### PersistentVolume (nfs-pv)
+### PersistentVolume (shared-storage-pv)
 ```yaml
 Capacity: 2Gi
 Access Modes: ReadWriteMany (RWX)
 Reclaim Policy: Retain
-Storage Type: HostPath (/exports)
+Storage Type: HostPath (/tmp/shared-data)
+Node Affinity: k3d-storage-lab-server-0
 ```
 
 ### PersistentVolumeClaim (shared-web-pvc)
 ```yaml
 Capacity: 2Gi
 Access Modes: ReadWriteMany (RWX)
-Bound Volume: nfs-pv
+Bound Volume: shared-storage-pv
 Status: Bound
+Storage Class: None (manual binding)
 ```
 
 ## Verify Shared Storage Access
@@ -175,38 +171,41 @@ kubectl describe pvc shared-web-pvc -n exercise-2
 # Check pod events
 kubectl describe pod <pod-name> -n exercise-2
 
-# Common issue: Node affinity
-# All pods are pinned to k3d-storage-lab-server-0
-kubectl get node k3d-storage-lab-server-0
+# Check node affinity is met
+kubectl get nodes -L kubernetes.io/hostname
 ```
 
 ### PVC not binding
 ```bash
 # Check PV status
-kubectl get pv nfs-pv -o yaml
+kubectl get pv shared-storage-pv -o yaml
 
 # Check PVC status
 kubectl get pvc shared-web-pvc -n exercise-2 -o yaml
 
-# Ensured PV and PVC access modes match (both RWX)
+# Ensure PV and PVC access modes match (both RWX)
+kubectl describe pvc shared-web-pvc -n exercise-2
 ```
 
-### NFS server not ready
+### Pods not reaching Ready state
 ```bash
-# Check NFS pod logs
-kubectl logs -n exercise-2 -l app=nfs-server
+# Check pod logs
+kubectl logs -n exercise-2 <pod-name>
 
-# Verify exports
-kubectl exec -n exercise-2 <nfs-pod> -- exportfs -v
+# Check for init container issues
+kubectl logs -n exercise-2 <pod-name> -c init-storage
+
+# Verify shared storage was created
+kubectl exec -n exercise-2 <pod-name> -- ls -la /usr/share/nginx/html/
 ```
 
-### Web app returns 403 Forbidden
+### Web app returns 403 or 404
 ```bash
 # Check if index.html exists
 kubectl exec -n exercise-2 <pod> -- ls -la /usr/share/nginx/html/
 
-# Create index.html manually
-kubectl exec -n exercise-2 <pod> -- sh -c "echo '<h1>Test</h1>' > /usr/share/nginx/html/index.html"
+# Verify file contents
+kubectl exec -n exercise-2 <pod> -- cat /usr/share/nginx/html/index.html
 ```
 
 ## Cleanup
@@ -225,24 +224,27 @@ kubectl exec -n exercise-2 <pod> -- sh -c "echo '<h1>Test</h1>' > /usr/share/ngi
 ## Learning Points
 
 1. **RWX Access Mode:**
-   - Multiple pods can read and write simultaneously
+   - Multiple pods on the same node can read and write simultaneously
    - Data is shared across all replicas
    - Changes are immediately visible to all pods
 
 2. **Storage Binding:**
-   - PVC binds to first matching PV
+   - PVC binds to matching PV with sufficient capacity
    - Access modes must be compatible
    - Storage capacity must meet PVC requests
+   - Manual binding (storageClassName: "") requires exact name match
 
 3. **HostPath Storage:**
-   - Direct node filesystem access
+   - Direct node filesystem access using `/tmp/shared-data`
    - Good for development/testing
-   - Not recommended for production
    - Data persists on the node
+   - Single-node limitation: pods must run on same node
+   - Not recommended for production
 
 4. **Multi-Replica Patterns:**
    - Replicas can share state via shared storage
-   - Useful for web servers, databases, caches
+   - Init containers can populate initial shared data
+   - Useful for web servers, shared configuration, logs
    - Requires careful data consistency handling
 
 ## References

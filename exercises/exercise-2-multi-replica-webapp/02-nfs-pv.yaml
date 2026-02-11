@@ -12,4 +12,4 @@ spec:
   storageClassName: ""
   nfs:
     path: /exports
-    server: 10.43.224.178
+    server: 10.43.216.97

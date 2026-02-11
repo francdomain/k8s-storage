@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp
+  namespace: exercise-2
+  labels:
+    app: webapp
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k3d-storage-lab-server-0
+      initContainers:
+      - name: init-storage
+        image: busybox:latest
+        command:
+        - sh
+        - -c
+        - |
+          mkdir -p /usr/share/nginx/html
+          echo "Hello from $(hostname) - $(date)" > /usr/share/nginx/html/index.html
+          echo "<h1>Shared Storage Test</h1>" >> /usr/share/nginx/html/index.html
+          echo "<p>Pod: $(hostname)</p>" >> /usr/share/nginx/html/index.html
+          echo "<p>Time: $(date)</p>" >> /usr/share/nginx/html/index.html
+          ls -la /usr/share/nginx/html/
+        volumeMounts:
+        - name: shared-storage
+          mountPath: /usr/share/nginx/html
+      containers:
+      - name: webapp
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+          name: http
+        volumeMounts:
+        - name: shared-storage
+          mountPath: /usr/share/nginx/html
+          readOnly: false
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 1
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+      volumes:
+      - name: shared-storage
+        persistentVolumeClaim:
+          claimName: shared-web-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webapp-service
+  namespace: exercise-2
+  labels:
+    app: webapp
+spec:
+  type: ClusterIP
+  selector:
+    app: webapp
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
