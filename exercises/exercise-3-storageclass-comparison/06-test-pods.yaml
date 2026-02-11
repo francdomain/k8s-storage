@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-retain-pod
+  namespace: exercise-3
+spec:
+  nodeName: k3d-storage-lab-agent-0
+  containers:
+  - name: test
+    image: busybox
+    command: ["/bin/sh", "-c"]
+    args:
+    - |
+      echo "Testing retain policy storage..."
+      echo "Writing test data to /data"
+      dd if=/dev/zero of=/data/testfile.bin bs=1M count=10 status=none
+      echo "✅ Data written to retain policy volume"
+      echo "Keeping container running..."
+      tail -f /dev/null
+    volumeMounts:
+    - name: data
+      mountPath: /data
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: retain-policy-pvc
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-delete-pod
+  namespace: exercise-3
+spec:
+  nodeName: k3d-storage-lab-agent-0
+  containers:
+  - name: test
+    image: busybox
+    command: ["/bin/sh", "-c"]
+    args:
+    - |
+      echo "Testing delete policy storage..."
+      echo "Writing test data to /data"
+      dd if=/dev/zero of=/data/testfile.bin bs=1M count=10 status=none
+      echo "✅ Data written to delete policy volume"
+      echo "Keeping container running..."
+      tail -f /dev/null
+    volumeMounts:
+    - name: data
+      mountPath: /data
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: delete-policy-pvc
